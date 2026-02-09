@@ -90,6 +90,48 @@ def clone_repository(repo_url: str, target_dir: str) -> bool:
         return False
 
 
+def get_default_branch(repo_path: str) -> Optional[str]:
+    """
+    Detect the default branch of a repository.
+    
+    Args:
+        repo_path: Path to the Git repository
+        
+    Returns:
+        Default branch name, or None if it cannot be determined
+    """
+    # Try symbolic-ref for the remote HEAD
+    try:
+        result = subprocess.run(
+            ['git', 'symbolic-ref', 'refs/remotes/origin/HEAD'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        # Output is like "refs/remotes/origin/master"
+        return result.stdout.strip().split('/')[-1]
+    except subprocess.CalledProcessError:
+        pass
+
+    # Fallback: try 'git remote show origin' and parse the HEAD branch
+    try:
+        result = subprocess.run(
+            ['git', 'remote', 'show', 'origin'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        for line in result.stdout.splitlines():
+            if 'HEAD branch' in line:
+                return line.split(':')[-1].strip()
+    except subprocess.CalledProcessError:
+        pass
+
+    return None
+
+
 def get_commits(repo_path: str, branch: str = 'main') -> List[Dict[str, str]]:
     """
     Get all commits from a repository branch.
@@ -102,14 +144,32 @@ def get_commits(repo_path: str, branch: str = 'main') -> List[Dict[str, str]]:
         List of commit dictionaries with hash, message, author, and date
     """
     try:
-        # First, checkout the branch
-        subprocess.run(
+        # First, try to checkout the specified branch
+        checkout_result = subprocess.run(
             ['git', 'checkout', branch],
             cwd=repo_path,
             capture_output=True,
-            text=True,
-            check=True
+            text=True
         )
+
+        if checkout_result.returncode != 0:
+            # Branch not found, try to detect the default branch
+            default_branch = get_default_branch(repo_path)
+            if default_branch and default_branch != branch:
+                print(f"Warning: Branch '{branch}' not found. "
+                      f"Falling back to default branch '{default_branch}'.",
+                      file=sys.stderr)
+                subprocess.run(
+                    ['git', 'checkout', default_branch],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+            else:
+                print(f"Error: Branch '{branch}' not found and could not "
+                      f"determine default branch.", file=sys.stderr)
+                return []
         
         # Get commit log with specific format
         result = subprocess.run(
