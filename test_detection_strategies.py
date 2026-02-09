@@ -30,7 +30,7 @@ def test_rosa_strategy():
         ("Merge branch feature-123", False),
         ("Add new feature", False),
         ("Update documentation", False),
-        ("Fix null pointer exception", False),  # Has 'fix' but not 'bug' words
+        ("Fix null pointer exception", False),  # Has 'fix' but 'exception' is not in Rosa's bug_words list
     ]
     
     passed = 0

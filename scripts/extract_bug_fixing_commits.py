@@ -154,10 +154,14 @@ def detect_bug_fix_issue_id(message: str, repo_name: str, config: Dict) -> Tuple
             return True, match.group()
     
     # Check GitHub issue pattern (requires "fix" word)
-    github_match = re.search(r'#\d+', message)
+    # Using single pattern to check both issue ID and fix word presence
+    github_pattern = re.compile(r'(?=.*\bfix\b).*#\d+|#\d+.*\bfix\b', re.I)
+    github_match = github_pattern.search(message)
     if github_match:
-        if re.search(r'\bfix', message, re.I):
-            return True, github_match.group()
+        # Extract just the issue number for the matched pattern
+        issue_match = re.search(r'#\d+', github_match.group())
+        if issue_match:
+            return True, issue_match.group()
     
     return False, None
 
@@ -379,8 +383,8 @@ def extract_bug_fixing_commits(
     if config_file and yaml:
         try:
             config = load_config(config_file)
-        except:
-            pass
+        except Exception as e:
+            print(f"Warning: Could not load config file: {e}", file=sys.stderr)
     
     # Load patterns for legacy mode
     if custom_patterns:
