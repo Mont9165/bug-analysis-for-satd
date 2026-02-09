@@ -37,7 +37,8 @@ def run_full_pipeline(
     output_dir: str = "./output",
     config_file: str = None,
     custom_patterns: list = None,
-    model: str = "Qwen/Qwen3-8B"
+    model: str = "Qwen/Qwen3-8B",
+    strategy: str = "combined"
 ) -> bool:
     """
     Run the complete bug analysis pipeline.
@@ -50,6 +51,7 @@ def run_full_pipeline(
         config_file: Path to config file with bug-fix patterns
         custom_patterns: Custom patterns for bug-fix detection
         model: LLM model to use for analysis
+        strategy: Bug-fix detection strategy
         
     Returns:
         True if successful, False otherwise
@@ -59,6 +61,7 @@ def run_full_pipeline(
     print("="*70)
     print(f"Repository: {repo_url}")
     print(f"Branch: {branch}")
+    print(f"Strategy: {strategy}")
     print(f"Model: {model}")
     print(f"Output: {output_dir}")
     print("="*70 + "\n")
@@ -73,7 +76,8 @@ def run_full_pipeline(
         branch=branch,
         output_dir=output_dir,
         config_file=config_file,
-        custom_patterns=custom_patterns
+        custom_patterns=custom_patterns,
+        strategy=strategy
     )
     
     if not bug_fix_file or not os.path.exists(bug_fix_file):
@@ -210,6 +214,13 @@ Examples:
         help='LLM model to use for analysis (default: Qwen/Qwen3-8B)'
     )
     
+    parser.add_argument(
+        '--strategy',
+        choices=['simple', 'strict', 'pantiuchina', 'issue_id', 'combined'],
+        default='combined',
+        help='Bug-fix detection strategy (default: combined)'
+    )
+    
     args = parser.parse_args()
     
     # Run the full pipeline
@@ -220,7 +231,8 @@ Examples:
         output_dir=args.output_dir,
         config_file=args.config,
         custom_patterns=args.patterns,
-        model=args.model
+        model=args.model,
+        strategy=args.strategy
     )
     
     sys.exit(0 if success else 1)
