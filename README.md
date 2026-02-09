@@ -147,23 +147,118 @@ python scripts/run_llm4szz_analysis.py \
 
 ## Configuration
 
-### Bug-Fix Detection Patterns
+### Bug-Fix Detection Strategies
 
-Default patterns are defined in `configs/bug_fix_patterns.yaml`:
+The tool supports multiple detection strategies based on literature:
+
+#### 1. **Combined Strategy (Default)**
+Uses all detection methods in priority order:
+1. Issue ID-based (JIRA/GitHub)
+2. Strict (Rosa et al.)
+3. Pantiuchina et al.
+4. Simple (Casalnuovo et al.)
+
+```bash
+python scripts/extract_bug_fixing_commits.py \
+    --repo-url https://github.com/apache/commons-lang \
+    --branch master \
+    --strategy combined
+```
+
+#### 2. **Issue ID Strategy**
+Detects bug-fixing commits based on issue tracker IDs:
+- **JIRA patterns**: `LANG-123`, `IO-456`, `HHH-789`, etc.
+- **GitHub issues**: `#123` (with "fix" keyword)
+
+```bash
+python scripts/extract_bug_fixing_commits.py \
+    --repo-url https://github.com/apache/commons-lang \
+    --branch master \
+    --strategy issue_id \
+    --config configs/bug_fix_patterns.yaml
+```
+
+#### 3. **Strict Strategy (Rosa et al., 2023)**
+Requires BOTH fix-related AND bug-related words:
+- **Fix words**: fix, solve
+- **Bug words**: bug, issue, problem, error, misfeature
+- **Excludes**: merge
+
+```bash
+python scripts/extract_bug_fixing_commits.py \
+    --repo-url https://github.com/owner/repo \
+    --strategy strict
+```
+
+#### 4. **Pantiuchina Strategy (Pantiuchina et al., 2020)**
+Requires: `(fix|solve|close)` AND `(bug|defect|crash|fail|error)`
+
+```bash
+python scripts/extract_bug_fixing_commits.py \
+    --repo-url https://github.com/owner/repo \
+    --strategy pantiuchina
+```
+
+#### 5. **Simple Strategy (Casalnuovo et al., 2017)**
+Matches any keyword: error, defect, flaw, bug, fix, issue, mistake, fault, incorrect
+
+```bash
+python scripts/extract_bug_fixing_commits.py \
+    --repo-url https://github.com/owner/repo \
+    --strategy simple
+```
+
+### Batch Processing
+
+Process multiple repositories from a configuration file:
+
+```bash
+# Process all repositories with combined strategy
+python scripts/batch_extract.py
+
+# Use specific strategy for all repositories
+python scripts/batch_extract.py --strategy issue_id
+
+# Custom output directory
+python scripts/batch_extract.py --output-dir ./batch_results
+```
+
+The configuration file `configs/bug_fix_patterns.yaml` includes:
 
 ```yaml
-bug_fix_patterns:
-  commit_messages:
-    - '\bfix\b'
-    - '\bfixed\b'
-    - '\bfixes\b'
-    - '\bbug\b'
-    - '\berror\b'
-    - '\bpatch\b'
-    - '\brepair\b'
-    - '\bresolve\b'
-    - '\bcorrect\b'
-    - '\bdefect\b'
+# Detection strategy configuration
+detection_strategy: combined
+
+# Rosa et al. (2023) patterns
+rosa_2023:
+  fix_words: [fix, solve]
+  bug_words: [bug, issue, problem, error, misfeature]
+
+# Pantiuchina et al. (2020) patterns
+pantiuchina_2020:
+  fix_words: [fix, solve, close]
+  bug_words: [bug, defect, crash, fail, error]
+
+# Casalnuovo et al. (2017) patterns
+casalnuovo_2017:
+  keywords: [error, defect, flaw, bug, fix, issue, mistake, fault, incorrect]
+
+# Project-specific JIRA patterns
+jira_patterns:
+  apache/commons-lang: "LANG-\\d+"
+  apache/commons-io: "IO-\\d+"
+  hibernate/hibernate-orm: "HHH-\\d+"
+  apache/dubbo: "DUBBO-\\d+"
+  apache/maven: "MNG-\\d+"
+  apache/storm: "STORM-\\d+"
+
+# Target repositories for batch processing
+target_repositories:
+  - url: https://github.com/apache/commons-lang
+    branch: master
+  - url: https://github.com/apache/commons-io
+    branch: master
+  # ... more repositories
 ```
 
 You can customize patterns by:
@@ -175,7 +270,7 @@ python scripts/extract_bug_fixing_commits.py \
     --config configs/custom_patterns.yaml
 ```
 
-2. **Specifying patterns on command line**:
+2. **Specifying patterns on command line** (legacy mode):
 ```bash
 python scripts/extract_bug_fixing_commits.py \
     --repo-url https://github.com/owner/repo \
@@ -186,14 +281,27 @@ python scripts/extract_bug_fixing_commits.py \
 
 ### Bug-Fixing Commits (`bug_fixing_commits.json`)
 
+With detection metadata:
+
 ```json
 [
   {
-    "repo_name": "owner/repo",
+    "repo_name": "apache/commons-lang",
     "bug_fixing_commit": "abc123def456...",
-    "commit_message": "Fix null pointer exception in user handler",
+    "commit_message": "LANG-1234: Fix null pointer exception in StringUtils",
     "author": "Developer Name <dev@example.com>",
-    "date": "2024-01-15T14:30:00Z"
+    "date": "2024-01-15T14:30:00Z",
+    "detection_method": "issue_id",
+    "matched_pattern": "LANG-1234"
+  },
+  {
+    "repo_name": "apache/commons-lang",
+    "bug_fixing_commit": "def789abc012...",
+    "commit_message": "Fix bug in array handling",
+    "author": "Another Dev <dev2@example.com>",
+    "date": "2024-01-16T09:15:00Z",
+    "detection_method": "strict",
+    "matched_pattern": "Fix + bug"
   }
 ]
 ```
@@ -300,6 +408,25 @@ The `run_llm4szz_analysis.py` script prepares data in LLM4SZZ format and provide
 
 - **LLM4SZZ**: LLM-enhanced bug-inducing commit detection  
   https://github.com/Mont9165/LLM4SZZ
+
+## Literature References
+
+This tool implements bug-fixing commit detection strategies from the following research:
+
+1. **Rosa et al. (2023)** - "Strict Strategy"  
+   Requires both fix-related words (fix, solve) AND bug-related words (bug, issue, problem, error, misfeature), while excluding merge commits.
+
+2. **Pantiuchina et al. (2020)** - "OR+AND Strategy"  
+   Uses the pattern: `(fix|solve|close) AND (bug|defect|crash|fail|error)`
+
+3. **Casalnuovo et al. (2017)** - "Simple Keyword Strategy"  
+   Matches any of: error, defect, flaw, bug, fix, issue, mistake, fault, incorrect
+
+4. **Borg et al. (2019)** - "SZZ Unleashed: Issue ID-based Detection"  
+   Identifies commits through JIRA patterns (e.g., `LANG-123`) and GitHub issue references (e.g., `#123`)
+
+5. **Wattanakriengkrai et al.** - "LINE-DP"  
+   Provides additional context for bug analysis methodologies
 
 ## Contributing
 
