@@ -1,0 +1,17 @@
+# Bug-fix detection patterns for commit message analysis
+# These patterns are used to identify bug-fixing commits in Git repositories
+
+bug_fix_patterns:
+  commit_messages:
+    # Common bug-fix keywords (case-insensitive word boundaries)
+    - '\bfix\b'
+    - '\bfixed\b'
+    - '\bfixes\b'
+    - '\bbug\b'
+    - '\berror\b'
+    - '\bpatch\b'
+    - '\brepair\b'
+    - '\bresolve\b'
+    - '\bresolved\b'
+    - '\bcorrect\b'
+    - '\bdefect\b'

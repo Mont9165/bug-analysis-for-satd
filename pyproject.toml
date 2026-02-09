@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bug-analysis-for-satd"
+version = "0.1.0"
+description = "Unified bug analysis pipeline combining bug-fixing commit extraction and LLM4SZZ analysis"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Mont9165"}
+]
+keywords = ["bug-analysis", "szz", "llm", "software-maintenance", "satd"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "PyYAML>=6.0",
+    "GitPython>=3.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Mont9165/bug-analysis-for-satd"
+Repository = "https://github.com/Mont9165/bug-analysis-for-satd"
+"Related Project: AI_Agent_Bug" = "https://github.com/Mont9165/AI_Agent_Bug"
+"Related Project: LLM4SZZ" = "https://github.com/Mont9165/LLM4SZZ"

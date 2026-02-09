@@ -208,3 +208,6 @@ __marimo__/
 
 # SLURM job logs
 logs/
+# Project-specific
+repos/
+output/
