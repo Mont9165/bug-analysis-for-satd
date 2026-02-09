@@ -54,6 +54,8 @@ jira_patterns:
   apache/dubbo: "DUBBO-\\d+"
   apache/maven: "MNG-\\d+"
   apache/storm: "STORM-\\d+"
+  INRIA/spoon: "#\\d+"
+  jfree/jfreechart: "#\\d+"
 
 # Exclusion patterns (noise removal)
 exclusion_patterns:
