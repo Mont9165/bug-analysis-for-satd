@@ -146,11 +146,17 @@ def detect_bug_fix_issue_id(message: str, repo_name: str, config: Dict) -> Tuple
             return False, None
     
     # Check JIRA pattern for known projects
+    # Require bug-fix keywords alongside JIRA ID to avoid false positives
+    # (e.g., feature additions or refactoring that reference JIRA tickets)
+    bug_fix_keywords = re.compile(
+        r'\b(fix|solve|close|bug|defect|error|crash|fail|fault|patch|repair|resolve|correct)\b',
+        re.I
+    )
     jira_patterns = config.get('jira_patterns', {})
     if repo_name in jira_patterns:
         jira_pattern = jira_patterns[repo_name]
         match = re.search(jira_pattern, message)
-        if match:
+        if match and bug_fix_keywords.search(message):
             return True, match.group()
     
     # Check GitHub issue pattern (requires "fix" word)
