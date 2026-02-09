@@ -121,6 +121,13 @@ def test_issue_id_strategy():
         ("Fix #123: Handle user input", "INRIA/spoon", True),
         ("Merge branch develop", "apache/commons-lang", False),
         ("Add feature for user management", "apache/commons-lang", False),
+        # JIRA pattern without bug-fix keywords should NOT match
+        ("LANG-5678: Add new utility method", "apache/commons-lang", False),
+        ("LANG-9999: Refactor internal implementation", "apache/commons-lang", False),
+        ("IO-100: Update documentation", "apache/commons-io", False),
+        # JIRA pattern with bug-fix keywords should match
+        ("LANG-4321: Close defect in StringUtils", "apache/commons-lang", True),
+        ("HHH-111: Patch for session crash", "hibernate/hibernate-orm", True),
     ]
     
     passed = 0
