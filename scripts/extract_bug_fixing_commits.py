@@ -3,7 +3,13 @@
 Extract bug-fixing commits from a Git repository.
 
 This script analyzes commit messages to identify bug-fixing commits using
-configurable regex patterns and outputs them in a format compatible with LLM4SZZ.
+multiple detection strategies based on literature:
+- Rosa et al. (2023): Strict fix+bug word matching
+- Pantiuchina et al. (2020): (fix|solve|close) AND (bug|defect|...)
+- Casalnuovo et al. (2017): Simple keyword matching
+- Borg et al. (2019): Issue ID-based detection (JIRA/GitHub)
+
+Output is compatible with LLM4SZZ and includes detection metadata.
 """
 
 import argparse
@@ -13,8 +19,9 @@ import re
 import subprocess
 import sys
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 try:
     import yaml
@@ -22,9 +29,182 @@ except ImportError:
     yaml = None
 
 
+class BugFixDetectionStrategy(Enum):
+    """Bug-fix detection strategies based on literature."""
+    SIMPLE = "simple"           # Casalnuovo et al. - any keyword
+    STRICT = "strict"           # Rosa et al. - fix AND bug words
+    PANTIUCHINA = "pantiuchina" # Pantiuchina et al. - (fix|solve|close) AND (bug|...)
+    ISSUE_ID = "issue_id"       # JIRA/GitHub issue ID based
+    COMBINED = "combined"       # All strategies combined
+
+
+def load_config(config_file: str) -> Dict:
+    """
+    Load configuration from YAML file.
+    
+    Args:
+        config_file: Path to YAML config file
+        
+    Returns:
+        Configuration dictionary
+    """
+    if not yaml:
+        raise ImportError("PyYAML is required for config file loading")
+    
+    try:
+        with open(config_file, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print(f"Error loading config file {config_file}: {e}", file=sys.stderr)
+        return {}
+
+
+def detect_bug_fix_rosa(message: str) -> Tuple[bool, Optional[str]]:
+    """
+    Rosa et al. (2023) - requires fix AND bug words, excludes merge.
+    
+    Args:
+        message: Commit message to analyze
+        
+    Returns:
+        Tuple of (is_bug_fix, matched_pattern)
+    """
+    fix_words = re.compile(r'\b(fix|solve)\b', re.I)
+    bug_words = re.compile(r'\b(bug|issue|problem|error|misfeature)\b', re.I)
+    merge = re.compile(r'\bmerge\b', re.I)
+    
+    if merge.search(message):
+        return False, None
+    
+    fix_match = fix_words.search(message)
+    bug_match = bug_words.search(message)
+    
+    if fix_match and bug_match:
+        return True, f"{fix_match.group()} + {bug_match.group()}"
+    
+    return False, None
+
+
+def detect_bug_fix_pantiuchina(message: str) -> Tuple[bool, Optional[str]]:
+    """
+    Pantiuchina et al. (2020) - (fix|solve|close) AND (bug|defect|crash|fail|error).
+    
+    Args:
+        message: Commit message to analyze
+        
+    Returns:
+        Tuple of (is_bug_fix, matched_pattern)
+    """
+    fix_words = re.compile(r'\b(fix|solve|close)\b', re.I)
+    bug_words = re.compile(r'\b(bug|defect|crash|fail|error)\b', re.I)
+    
+    fix_match = fix_words.search(message)
+    bug_match = bug_words.search(message)
+    
+    if fix_match and bug_match:
+        return True, f"{fix_match.group()} + {bug_match.group()}"
+    
+    return False, None
+
+
+def detect_bug_fix_casalnuovo(message: str) -> Tuple[bool, Optional[str]]:
+    """
+    Casalnuovo et al. (2017) - simple keyword match.
+    
+    Args:
+        message: Commit message to analyze
+        
+    Returns:
+        Tuple of (is_bug_fix, matched_pattern)
+    """
+    keywords = re.compile(
+        r'\b(error|defect|flaw|bug|fix|issue|mistake|fault|incorrect)\b', 
+        re.I
+    )
+    match = keywords.search(message)
+    if match:
+        return True, match.group()
+    return False, None
+
+
+def detect_bug_fix_issue_id(message: str, repo_name: str, config: Dict) -> Tuple[bool, Optional[str]]:
+    """
+    Issue ID based detection (SZZ Unleashed - Borg et al., 2019).
+    
+    Args:
+        message: Commit message to analyze
+        repo_name: Repository name (e.g., 'apache/commons-lang')
+        config: Configuration dictionary with patterns
+        
+    Returns:
+        Tuple of (is_bug_fix, matched_pattern)
+    """
+    # Check exclusion patterns first
+    exclusion_patterns = config.get('exclusion_patterns', [])
+    for pattern in exclusion_patterns:
+        if re.search(pattern, message):
+            return False, None
+    
+    # Check JIRA pattern for known projects
+    jira_patterns = config.get('jira_patterns', {})
+    if repo_name in jira_patterns:
+        jira_pattern = jira_patterns[repo_name]
+        match = re.search(jira_pattern, message)
+        if match:
+            return True, match.group()
+    
+    # Check GitHub issue pattern (requires "fix" word)
+    # Using single pattern to check both issue ID and fix word presence
+    github_pattern = re.compile(r'(?=.*\bfix\b).*#\d+|#\d+.*\bfix\b', re.I)
+    github_match = github_pattern.search(message)
+    if github_match:
+        # Extract just the issue number for the matched pattern
+        issue_match = re.search(r'#\d+', github_match.group())
+        if issue_match:
+            return True, issue_match.group()
+    
+    return False, None
+
+
+def detect_bug_fix_combined(message: str, repo_name: str, config: Dict) -> Tuple[bool, str, Optional[str]]:
+    """
+    Combined detection using all strategies.
+    
+    Args:
+        message: Commit message to analyze
+        repo_name: Repository name
+        config: Configuration dictionary
+        
+    Returns:
+        Tuple of (is_bug_fix, detection_method, matched_pattern)
+    """
+    # Try issue ID based first (most specific)
+    is_fix, pattern = detect_bug_fix_issue_id(message, repo_name, config)
+    if is_fix:
+        return True, "issue_id", pattern
+    
+    # Try Rosa et al. (strict)
+    is_fix, pattern = detect_bug_fix_rosa(message)
+    if is_fix:
+        return True, "strict", pattern
+    
+    # Try Pantiuchina et al.
+    is_fix, pattern = detect_bug_fix_pantiuchina(message)
+    if is_fix:
+        return True, "pantiuchina", pattern
+    
+    # Try Casalnuovo et al. (simple)
+    is_fix, pattern = detect_bug_fix_casalnuovo(message)
+    if is_fix:
+        return True, "simple", pattern
+    
+    return False, None, None
+
+
 def load_bug_fix_patterns(config_file: Optional[str] = None) -> List[str]:
     """
     Load bug-fix detection patterns from config file or use defaults.
+    (Legacy function for backward compatibility)
     
     Args:
         config_file: Path to YAML config file with patterns
@@ -48,11 +228,10 @@ def load_bug_fix_patterns(config_file: Optional[str] = None) -> List[str]:
     
     if config_file and yaml:
         try:
-            with open(config_file, 'r') as f:
-                config = yaml.safe_load(f)
-                patterns = config.get('bug_fix_patterns', {}).get('commit_messages', [])
-                if patterns:
-                    return patterns
+            config = load_config(config_file)
+            patterns = config.get('bug_fix_patterns', {}).get('commit_messages', [])
+            if patterns:
+                return patterns
         except Exception as e:
             print(f"Warning: Could not load config file {config_file}: {e}", file=sys.stderr)
             print("Using default patterns.", file=sys.stderr)
@@ -221,7 +400,7 @@ def get_commits(repo_path: str, branch: str = 'main') -> List[Dict[str, str]]:
 
 def is_bug_fixing_commit(message: str, patterns: List[str]) -> bool:
     """
-    Check if a commit message indicates a bug fix.
+    Check if a commit message indicates a bug fix (legacy method).
     
     Args:
         message: Commit message to analyze
@@ -242,7 +421,8 @@ def extract_bug_fixing_commits(
     branch: str,
     output_dir: str,
     config_file: Optional[str] = None,
-    custom_patterns: Optional[List[str]] = None
+    custom_patterns: Optional[List[str]] = None,
+    strategy: str = 'combined'
 ) -> str:
     """
     Main function to extract bug-fixing commits from a repository.
@@ -253,17 +433,26 @@ def extract_bug_fixing_commits(
         output_dir: Directory to save output files
         config_file: Path to config file with patterns
         custom_patterns: Custom patterns to use instead of defaults
+        strategy: Detection strategy to use
         
     Returns:
         Path to the output JSON file
     """
-    # Load patterns
+    # Load configuration if using new strategies
+    config = {}
+    if config_file and yaml:
+        try:
+            config = load_config(config_file)
+        except Exception as e:
+            print(f"Warning: Could not load config file: {e}", file=sys.stderr)
+    
+    # Load patterns for legacy mode
     if custom_patterns:
         patterns = custom_patterns
     else:
         patterns = load_bug_fix_patterns(config_file)
     
-    print(f"Using {len(patterns)} bug-fix patterns for detection")
+    print(f"Using detection strategy: {strategy}")
     
     # Extract repository name from URL
     repo_name = repo_url.rstrip('/').split('/')[-1].replace('.git', '')
@@ -288,17 +477,51 @@ def extract_bug_fixing_commits(
     commits = get_commits(repo_path, branch)
     print(f"Found {len(commits)} total commits")
     
-    # Filter bug-fixing commits
+    # Filter bug-fixing commits based on strategy
     bug_fixing_commits = []
+    
     for commit in commits:
-        if is_bug_fixing_commit(commit['message'], patterns):
-            bug_fixing_commits.append({
+        is_fix = False
+        detection_method = None
+        matched_pattern = None
+        
+        if strategy == 'simple':
+            is_fix, matched_pattern = detect_bug_fix_casalnuovo(commit['message'])
+            detection_method = 'simple'
+        elif strategy == 'strict':
+            is_fix, matched_pattern = detect_bug_fix_rosa(commit['message'])
+            detection_method = 'strict'
+        elif strategy == 'pantiuchina':
+            is_fix, matched_pattern = detect_bug_fix_pantiuchina(commit['message'])
+            detection_method = 'pantiuchina'
+        elif strategy == 'issue_id':
+            is_fix, matched_pattern = detect_bug_fix_issue_id(commit['message'], repo_name, config)
+            detection_method = 'issue_id'
+        elif strategy == 'combined':
+            is_fix, detection_method, matched_pattern = detect_bug_fix_combined(
+                commit['message'], repo_name, config
+            )
+        else:
+            # Fallback to legacy pattern matching
+            is_fix = is_bug_fixing_commit(commit['message'], patterns)
+            detection_method = 'legacy'
+        
+        if is_fix:
+            bug_fix_data = {
                 'repo_name': repo_name,
                 'bug_fixing_commit': commit['hash'],
                 'commit_message': commit['message'],
                 'author': commit['author'],
                 'date': commit['date']
-            })
+            }
+            
+            # Add detection metadata if available
+            if detection_method:
+                bug_fix_data['detection_method'] = detection_method
+            if matched_pattern:
+                bug_fix_data['matched_pattern'] = matched_pattern
+            
+            bug_fixing_commits.append(bug_fix_data)
     
     print(f"Identified {len(bug_fixing_commits)} bug-fixing commits")
     
@@ -320,11 +543,18 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage
+  # Basic usage with combined strategy
   python extract_bug_fixing_commits.py \\
       --repo-url https://github.com/owner/repo \\
       --branch main \\
       --output-dir ./output
+
+  # With specific strategy
+  python extract_bug_fixing_commits.py \\
+      --repo-url https://github.com/apache/commons-lang \\
+      --branch master \\
+      --strategy issue_id \\
+      --config configs/bug_fix_patterns.yaml
 
   # With custom config file
   python extract_bug_fixing_commits.py \\
@@ -333,7 +563,7 @@ Examples:
       --output-dir ./output \\
       --config configs/bug_fix_patterns.yaml
 
-  # With custom patterns
+  # With custom patterns (legacy)
   python extract_bug_fixing_commits.py \\
       --repo-url https://github.com/owner/repo \\
       --branch main \\
@@ -368,7 +598,14 @@ Examples:
     parser.add_argument(
         '--patterns',
         nargs='+',
-        help='Custom regex patterns for bug-fix detection'
+        help='Custom regex patterns for bug-fix detection (legacy mode)'
+    )
+    
+    parser.add_argument(
+        '--strategy',
+        choices=['simple', 'strict', 'pantiuchina', 'issue_id', 'combined'],
+        default='combined',
+        help='Bug-fix detection strategy (default: combined)'
     )
     
     args = parser.parse_args()
@@ -392,7 +629,8 @@ Examples:
         branch=args.branch,
         output_dir=args.output_dir,
         config_file=args.config,
-        custom_patterns=args.patterns
+        custom_patterns=args.patterns,
+        strategy=args.strategy
     )
     
     if output_file:

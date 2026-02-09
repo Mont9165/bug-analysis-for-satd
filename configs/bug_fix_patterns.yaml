@@ -1,6 +1,87 @@
-# Bug-fix detection patterns for commit message analysis
-# These patterns are used to identify bug-fixing commits in Git repositories
+# Bug-fix detection configuration based on literature
+# References:
+# - Rosa et al. (2023) - Strict fix+bug word matching
+# - Pantiuchina et al. (2020) - (fix|solve|close) AND (bug|defect|...)
+# - Casalnuovo et al. (2017) - Simple keyword matching
+# - Borg et al. (2019) - SZZ Unleashed, Issue ID based
 
+# Detection strategy: simple, strict, pantiuchina, issue_id, combined
+detection_strategy: combined
+
+# Rosa et al. (2023) - Strict matching (requires BOTH fix AND bug words)
+rosa_2023:
+  fix_words:
+    - fix
+    - solve
+  bug_words:
+    - bug
+    - issue
+    - problem
+    - error
+    - misfeature
+
+# Pantiuchina et al. (2020)
+pantiuchina_2020:
+  fix_words:
+    - fix
+    - solve
+    - close
+  bug_words:
+    - bug
+    - defect
+    - crash
+    - fail
+    - error
+
+# Casalnuovo et al. (2017) - Simple keywords (any match)
+casalnuovo_2017:
+  keywords:
+    - error
+    - defect
+    - flaw
+    - bug
+    - fix
+    - issue
+    - mistake
+    - fault
+    - incorrect
+
+# Project-specific JIRA patterns (for Issue ID-based detection)
+jira_patterns:
+  apache/commons-lang: "LANG-\\d+"
+  apache/commons-io: "IO-\\d+"
+  hibernate/hibernate-orm: "HHH-\\d+"
+  apache/dubbo: "DUBBO-\\d+"
+  apache/maven: "MNG-\\d+"
+  apache/storm: "STORM-\\d+"
+
+# Exclusion patterns (noise removal)
+exclusion_patterns:
+  - "[Mm]erge"
+  - "[Cc]herry"
+  - "[Rr]evert"
+  - "[Nn]oting"
+
+# Target repositories for batch processing
+target_repositories:
+  - url: https://github.com/apache/commons-lang
+    branch: master
+  - url: https://github.com/apache/commons-io
+    branch: master
+  - url: https://github.com/hibernate/hibernate-orm
+    branch: main
+  - url: https://github.com/apache/dubbo
+    branch: "3.3"
+  - url: https://github.com/INRIA/spoon
+    branch: master
+  - url: https://github.com/apache/maven
+    branch: master
+  - url: https://github.com/apache/storm
+    branch: master
+  - url: https://github.com/jfree/jfreechart
+    branch: master
+
+# Legacy patterns (backward compatibility)
 bug_fix_patterns:
   commit_messages:
     # Common bug-fix keywords (case-insensitive word boundaries)
