@@ -208,6 +208,15 @@ __marimo__/
 
 # SLURM job logs
 logs/
+slurm-*.out
 # Project-specific
 repos/
 output/
+output_issue_id/
+# Large data directories (too large for GitHub)
+batch_results/
+llm4szz_datasets/
+# Temporary sbatch argument files
+--all
+--export-csv
+--output

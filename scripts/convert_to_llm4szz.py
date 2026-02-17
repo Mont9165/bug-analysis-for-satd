@@ -14,19 +14,25 @@ import os
 from pathlib import Path
 
 
-def convert_to_llm4szz_format(input_file: str, output_file: str):
+def convert_to_llm4szz_format(input_file: str, output_file: str, agent_release_date: str = None):
     """
     Convert bug-fixing commits to LLM4SZZ format.
 
     Args:
         input_file: Path to bug_fixing_commits.json
         output_file: Path to output issue_list.json
+        agent_release_date: Optional agent release date (ISO format: YYYY-MM-DD)
+                           to limit the search range for bug-inducing commits.
+                           If not specified, uses LLM4SZZ's default (2025-01-01).
+                           Use "1970-01-01" to search all history.
     """
     # Load input data
     with open(input_file, 'r') as f:
         commits = json.load(f)
 
     print(f"Loaded {len(commits)} bug-fixing commits from {input_file}")
+    if agent_release_date:
+        print(f"Setting agent_release_date: {agent_release_date}")
 
     # Convert to LLM4SZZ format
     llm4szz_data = []
@@ -37,11 +43,17 @@ def convert_to_llm4szz_format(input_file: str, output_file: str):
         # Create GitHub commit URL
         commit_url = f"https://github.com/{repo_name}/commit/{bug_fixing_commit}"
 
-        llm4szz_data.append({
+        entry = {
             'repo_name': repo_name,
             'bug_fixing_commit': bug_fixing_commit,
             'commit_url': commit_url
-        })
+        }
+
+        # Add agent_release_date if specified
+        if agent_release_date:
+            entry['agent_release_date'] = agent_release_date
+
+        llm4szz_data.append(entry)
 
     # Create output directory
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -71,9 +83,18 @@ def main():
         help='Output issue_list.json file'
     )
 
+    parser.add_argument(
+        '--agent-release-date',
+        default=None,
+        help='Agent release date (ISO format: YYYY-MM-DD). '
+             'Limits search to commits after this date. '
+             'Use "1970-01-01" to disable date filtering. '
+             'Default: uses LLM4SZZ default (2025-01-01)'
+    )
+
     args = parser.parse_args()
 
-    convert_to_llm4szz_format(args.input, args.output)
+    convert_to_llm4szz_format(args.input, args.output, args.agent_release_date)
 
 
 if __name__ == '__main__':

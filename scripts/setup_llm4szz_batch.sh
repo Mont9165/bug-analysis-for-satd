@@ -8,6 +8,11 @@ LLM4SZZ_DIR="/work/kosei-ho/LLM4SZZ"
 BATCH_RESULTS="$BASE_DIR/batch_results"
 LLM4SZZ_DATASETS="$BASE_DIR/llm4szz_datasets"
 
+# Agent release date for LLM4SZZ
+# Use "1970-01-01" to search all history (no date filtering)
+# Use "2025-01-01" to use LLM4SZZ default (model knowledge cutoff)
+AGENT_RELEASE_DATE="${AGENT_RELEASE_DATE:-1970-01-01}"
+
 # Project list
 PROJECTS=(
     "commons-lang"
@@ -49,7 +54,8 @@ for project in "${PROJECTS[@]}"; do
     if [ -f "$INPUT_FILE" ]; then
         python3 "$BASE_DIR/scripts/convert_to_llm4szz.py" \
             --input "$INPUT_FILE" \
-            --output "$OUTPUT_FILE"
+            --output "$OUTPUT_FILE" \
+            --agent-release-date "$AGENT_RELEASE_DATE"
     else
         echo "❌ Input file not found: $INPUT_FILE"
         continue

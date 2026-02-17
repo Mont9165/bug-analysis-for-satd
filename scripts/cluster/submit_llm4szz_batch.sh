@@ -11,14 +11,14 @@ SCRIPT_DIR="${BASE_DIR}/scripts/cluster"
 
 # Project configurations (name:commit_count)
 declare -A PROJECTS
-PROJECTS[commons-lang]=424
-PROJECTS[commons-io]=232
+# PROJECTS[commons-lang]=424
+# PROJECTS[commons-io]=232
 PROJECTS[hibernate-orm]=3199
 PROJECTS[dubbo]=1503
-PROJECTS[spoon]=1152
-PROJECTS[maven]=1030
-PROJECTS[storm]=717
-PROJECTS[jfreechart]=74
+# PROJECTS[spoon]=1152
+# PROJECTS[maven]=1030
+# PROJECTS[storm]=717
+# PROJECTS[jfreechart]=74
 
 # Model configuration
 MODEL="Qwen/Qwen2.5-Coder-3B-Instruct"

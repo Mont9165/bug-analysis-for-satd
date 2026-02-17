@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH -p isgpu2h200_long
+#SBATCH -p gpu_short
 #SBATCH --gres=gpu:1
-#SBATCH --time=4-00:00:00
+#SBATCH --time=2:00:00
 #SBATCH --mem=200G
 #SBATCH --cpus-per-task=32
 #SBATCH --job-name=llm4szz_analysis
@@ -10,53 +10,63 @@
 
 # LLM4SZZ Analysis Only
 # For when bug-fixing commits are already extracted
+# This script expects dataset/ directory in the working directory
+
+set -e
 
 SCRIPT_PATH="$(realpath "$0")"
 MIN_RUNTIME_SEC=600
 
-INPUT_FILE="${INPUT_FILE:-output/bug_fixing_commits.json}"
-LLM4SZZ_PATH="${LLM4SZZ_PATH:-${HOME}/LLM4SZZ}"
-OUTPUT_DIR="${OUTPUT_DIR:-output}"
-MODEL="${MODEL:-Qwen/Qwen3-8B}"
+BASE_DIR="${HOME}/bug-analysis-for-satd"
+LLM4SZZ_DIR="${HOME}/LLM4SZZ"
+WORK_DIR="${WORK_DIR:-${BASE_DIR}}"
+MODEL="${MODEL:-Qwen/Qwen2.5-Coder-3B-Instruct}"
 PARALLEL="${PARALLEL:-5}"
 START_IDX="${START_IDX:-0}"
 END_IDX="${END_IDX:-}"
 
 mkdir -p logs
 
+# Initialize module system
+source /etc/profile.d/modules.sh
 module load singularity
 
-cd ~/bug-analysis-for-satd || exit 1
+cd "${WORK_DIR}" || exit 1
 
-echo "=== LLM4SZZ Analysis started at $(date) ==="
-echo "Input: $INPUT_FILE"
-echo "Model: $MODEL"
-echo "Index range: $START_IDX to ${END_IDX:-end}"
+echo "==========================================="
+echo "LLM4SZZ Analysis"
+echo "==========================================="
+echo "Job ID: ${SLURM_JOB_ID}"
+echo "Work directory: ${WORK_DIR}"
+echo "Model: ${MODEL}"
+echo "Parallel: ${PARALLEL}"
+echo "Start index: ${START_IDX}"
+echo "End index: ${END_IDX:-end}"
+echo "==========================================="
+echo ""
 
 START_TIME=$(date +%s)
 
 # Build command with optional start/end
-CMD="python3.12 scripts/run_llm4szz_analysis.py \
-  --input $INPUT_FILE \
-  --llm4szz-path /llm4szz \
-  --output-dir $OUTPUT_DIR \
-  --model $MODEL \
-  --parallel $PARALLEL"
-
-if [ -n "$START_IDX" ]; then
-  CMD="$CMD --start $START_IDX"
-fi
-if [ -n "$END_IDX" ]; then
-  CMD="$CMD --end $END_IDX"
+END_ARG=""
+if [ -n "${END_IDX}" ]; then
+    END_ARG="--end ${END_IDX}"
 fi
 
+# Run actual LLM4SZZ tool
 singularity exec --nv \
-  --bind ${HOME}/bug-analysis-for-satd:/app \
-  --bind ${HOME}/LLM4SZZ:/llm4szz \
-  --bind ${HOME}/bug-analysis-for-satd/repos:/app/repos \
-  --pwd /app \
+  --bind ${WORK_DIR}:/workspace:rw \
+  --bind ${WORK_DIR}:/app:rw \
+  --bind ${LLM4SZZ_DIR}:/llm4szz:ro \
+  --pwd /workspace \
+  --env TMPDIR=/workspace \
+  --env HOME=/workspace \
   ~/singularity_images/llm4szz.sif \
-  $CMD
+  python3.12 /llm4szz/llm4szz.py \
+    --model "${MODEL}" \
+    --parallel "${PARALLEL}" \
+    --start "${START_IDX}" \
+    ${END_ARG}
 
 EXIT_CODE=$?
 END_TIME=$(date +%s)
